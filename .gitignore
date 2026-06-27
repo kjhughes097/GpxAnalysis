@@ -1,0 +1,11 @@
+bin/
+obj/
+node_modules/
+dist/
+*.user
+.vs/
+.vscode/
+.idea/
+.DS_Store
+GpxAnalysis/wwwroot/
+!GpxAnalysis/wwwroot/.gitkeep
