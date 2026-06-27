@@ -4,6 +4,7 @@ import DashboardPage from './pages/DashboardPage';
 import ActivitiesPage from './pages/ActivitiesPage';
 import RoutesPage from './pages/RoutesPage';
 import InsightsPage from './pages/InsightsPage';
+import ComparePage from './pages/ComparePage';
 import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
                 <Route path="/activities" element={<ActivitiesPage />} />
                 <Route path="/routes" element={<RoutesPage />} />
                 <Route path="/insights" element={<InsightsPage />} />
+                <Route path="/compare" element={<ComparePage />} />
                 <Route path="/settings" element={<SettingsPage />} />
             </Route>
         </Routes>

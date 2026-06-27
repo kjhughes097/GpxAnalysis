@@ -10,6 +10,7 @@ import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import DirectionsRunRoundedIcon from '@mui/icons-material/DirectionsRunRounded';
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
+import CompareArrowsRoundedIcon from '@mui/icons-material/CompareArrowsRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 
 const mainItems = [
@@ -17,6 +18,7 @@ const mainItems = [
     { text: 'Activities', icon: <DirectionsRunRoundedIcon />, path: '/activities' },
     { text: 'Routes', icon: <RouteRoundedIcon />, path: '/routes' },
     { text: 'Insights', icon: <InsightsRoundedIcon />, path: '/insights' },
+    { text: 'Compare Files', icon: <CompareArrowsRoundedIcon />, path: '/compare' },
 ];
 
 const secondaryItems = [
