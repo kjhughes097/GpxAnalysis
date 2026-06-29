@@ -191,6 +191,71 @@ function distanceAtElapsed(track: GpxTrack, elapsedSec: number): number {
     return d1 + frac * (d2 - d1);
 }
 
+/**
+ * Interpolate (lat, lon) position at a given elapsed-seconds offset from the track start.
+ */
+export function positionAtElapsed(
+    track: GpxTrack,
+    elapsedSec: number,
+): { lat: number; lon: number } {
+    const t0 = track.points[0].time.getTime();
+    const targetMs = t0 + elapsedSec * 1000;
+    const last = track.points[track.points.length - 1];
+    if (targetMs <= t0) return { lat: track.points[0].lat, lon: track.points[0].lon };
+    if (targetMs >= last.time.getTime()) return { lat: last.lat, lon: last.lon };
+    let lo = 0;
+    let hi = track.points.length - 1;
+    while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (track.points[mid].time.getTime() <= targetMs) lo = mid;
+        else hi = mid;
+    }
+    const a = track.points[lo];
+    const b = track.points[hi];
+    const t1 = a.time.getTime();
+    const t2 = b.time.getTime();
+    const frac = t2 === t1 ? 0 : (targetMs - t1) / (t2 - t1);
+    return {
+        lat: a.lat + frac * (b.lat - a.lat),
+        lon: a.lon + frac * (b.lon - a.lon),
+    };
+}
+
+/**
+ * Geographic separation: at each sampled elapsed time, the great-circle distance
+ * (meters) between the two tracks' actual positions. Unlike `relativePosition`
+ * (which compares distance-covered), this measures how physically far apart the
+ * runners are on the ground at the same moment.
+ */
+export interface SeparationSample {
+    elapsedSec: number;
+    separationMeters: number;
+}
+
+export function geographicSeparation(
+    reference: GpxTrack,
+    comparison: GpxTrack,
+    sampleCount = 200,
+): SeparationSample[] {
+    const maxElapsed = Math.min(reference.totalDuration, comparison.totalDuration);
+    if (maxElapsed <= 0) return [];
+    const step = maxElapsed / sampleCount;
+    const out: SeparationSample[] = [];
+    for (let i = 0; i <= sampleCount; i++) {
+        const t = i * step;
+        const a = positionAtElapsed(reference, t);
+        const b = positionAtElapsed(comparison, t);
+        out.push({
+            elapsedSec: t,
+            separationMeters: haversine(
+                { lat: a.lat, lon: a.lon, time: new Date(0) },
+                { lat: b.lat, lon: b.lon, time: new Date(0) },
+            ),
+        });
+    }
+    return out;
+}
+
 export function formatElapsed(seconds: number): string {
     const s = Math.max(0, Math.round(seconds));
     const h = Math.floor(s / 3600);

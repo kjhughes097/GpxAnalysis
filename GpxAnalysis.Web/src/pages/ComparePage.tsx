@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -8,18 +8,27 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import StraightenRoundedIcon from '@mui/icons-material/StraightenRounded';
+import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { ScatterChart } from '@mui/x-charts/ScatterChart';
 import {
     parseGpxFile,
     distanceOverTime,
     rollingPacePerMile,
     relativePosition,
+    geographicSeparation,
     formatElapsed,
     METERS_PER_MILE,
     type GpxTrack,
 } from '../utils/gpx';
+
+type CompareMode = 'distance' | 'location';
+const MODE_STORAGE_KEY = 'gpxanalysis.compareMode';
 
 const REFERENCE_COLOR = '#0984e3';
 const COMPARISON_COLOR = '#e17055';
@@ -87,6 +96,17 @@ export default function ComparePage() {
     const [reference, setReference] = useState<GpxTrack | null>(null);
     const [comparison, setComparison] = useState<GpxTrack | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [mode, setMode] = useState<CompareMode>(() => {
+        if (typeof window === 'undefined') return 'distance';
+        const stored = window.localStorage.getItem(MODE_STORAGE_KEY);
+        return stored === 'location' ? 'location' : 'distance';
+    });
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+        }
+    }, [mode]);
 
     const handleSelect = async (
         file: File,
@@ -168,6 +188,25 @@ export default function ComparePage() {
         };
     }, [reference, comparison]);
 
+    const trackPaths = useMemo(() => {
+        const build = (t: GpxTrack | null) =>
+            t ? t.points.map((p) => ({ lon: p.lon, lat: p.lat })) : [];
+        return {
+            ref: build(reference),
+            cmp: build(comparison),
+            hasData: !!(reference || comparison),
+        };
+    }, [reference, comparison]);
+
+    const separationSeries = useMemo(() => {
+        if (!reference || !comparison) return null;
+        const samples = geographicSeparation(reference, comparison);
+        return {
+            x: samples.map((s) => s.elapsedSec),
+            miles: samples.map((s) => s.separationMeters / METERS_PER_MILE),
+        };
+    }, [reference, comparison]);
+
     const timeFormatter = (v: number) => formatElapsed(v);
 
     return (
@@ -178,6 +217,40 @@ export default function ComparePage() {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Upload two GPX files to compare distance, pacing, and relative position.
             </Typography>
+
+            <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.5}
+                sx={{ mb: 2, alignItems: { xs: 'flex-start', sm: 'center' } }}
+            >
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Comparison mode:
+                </Typography>
+                <ToggleButtonGroup
+                    value={mode}
+                    exclusive
+                    size="small"
+                    color="primary"
+                    onChange={(_, next) => {
+                        if (next === 'distance' || next === 'location') setMode(next);
+                    }}
+                    aria-label="Comparison mode"
+                >
+                    <ToggleButton value="distance" aria-label="Distance mode">
+                        <StraightenRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />
+                        Distance
+                    </ToggleButton>
+                    <ToggleButton value="location" aria-label="Location mode">
+                        <PlaceRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />
+                        Location
+                    </ToggleButton>
+                </ToggleButtonGroup>
+                <Typography variant="caption" color="text.secondary">
+                    {mode === 'distance'
+                        ? 'Compares distance covered and pace — normalised against GPS variance.'
+                        : 'Compares actual geographic coordinates — sensitive to GPS signal drift.'}
+                </Typography>
+            </Stack>
 
             {error && (
                 <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -205,6 +278,8 @@ export default function ComparePage() {
             </Grid>
 
             <Grid container spacing={2}>
+                {mode === 'distance' && (
+                <>
                 <Grid size={{ xs: 12 }}>
                     <Card>
                         <CardContent>
@@ -327,6 +402,105 @@ export default function ComparePage() {
                         </CardContent>
                     </Card>
                 </Grid>
+                </>
+                )}
+
+                {mode === 'location' && (
+                <>
+                <Grid size={{ xs: 12 }}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                                Track paths (latitude / longitude)
+                            </Typography>
+                            {trackPaths.hasData ? (
+                                <ScatterChart
+                                    xAxis={[{ label: 'Longitude' }]}
+                                    yAxis={[{ label: 'Latitude' }]}
+                                    series={[
+                                        ...(trackPaths.ref.length > 0
+                                            ? [{
+                                                  label: 'Reference',
+                                                  color: REFERENCE_COLOR,
+                                                  data: trackPaths.ref.map((p, i) => ({
+                                                      x: p.lon,
+                                                      y: p.lat,
+                                                      id: `r${i}`,
+                                                  })),
+                                                  markerSize: 2,
+                                              }]
+                                            : []),
+                                        ...(trackPaths.cmp.length > 0
+                                            ? [{
+                                                  label: 'Comparison',
+                                                  color: COMPARISON_COLOR,
+                                                  data: trackPaths.cmp.map((p, i) => ({
+                                                      x: p.lon,
+                                                      y: p.lat,
+                                                      id: `c${i}`,
+                                                  })),
+                                                  markerSize: 2,
+                                              }]
+                                            : []),
+                                    ]}
+                                    height={360}
+                                />
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                    Upload at least one GPX file to view track paths.
+                                </Typography>
+                            )}
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                Raw coordinates plotted as latitude vs. longitude. Divergence between
+                                the two lines reflects actual geographic offset (and any GPS drift).
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                                Geographic separation over time
+                            </Typography>
+                            {separationSeries ? (
+                                <>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                                        Great-circle distance between the two tracks' positions at
+                                        each moment in time.
+                                    </Typography>
+                                    <LineChart
+                                        xAxis={[
+                                            {
+                                                data: separationSeries.x,
+                                                label: 'Elapsed time',
+                                                valueFormatter: timeFormatter,
+                                            },
+                                        ]}
+                                        yAxis={[{ label: 'Separation (mi)' }]}
+                                        series={[
+                                            {
+                                                data: separationSeries.miles,
+                                                label: 'Separation',
+                                                color: COMPARISON_COLOR,
+                                                area: true,
+                                                showMark: false,
+                                            },
+                                        ]}
+                                        height={300}
+                                    />
+                                </>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                    Upload both files to see geographic separation.
+                                </Typography>
+                            )}
+                        </CardContent>
+                    </Card>
+                </Grid>
+                </>
+                )}
             </Grid>
         </Box>
     );
